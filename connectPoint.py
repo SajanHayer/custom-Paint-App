@@ -7,6 +7,8 @@ import time
 import numpy as np
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
+import heapq
+
 
 # window class
 class Window(QMainWindow):
@@ -203,20 +205,69 @@ class Window(QMainWindow):
         # Handle the case where the color name is not found
         self.brushColor = Qt.black
 
-  def createLists(self):
-    if len(self.copyofLCP) > 1:
-      refPoint = self.copyofLCP.pop(0)
-      copyList = np.array(self.copyofLCP )
-      distances = cdist([refPoint], copyList)[0]
-      # Find the index of the closest point
-      closest_index = np.argmin(distances)
-      # print(closest_index)
-      closest_point = copyList[closest_index]
-      self.listNxtPoints.append(closest_point)
-      # print(closest_point)
-      self.createLists()
-    else:
-      return  
+  def heuristic(x1, y1, x2, y2):
+    """
+    Heuristic function for A* search (Manhattan distance).
+    """
+
+    # This can be changed to a less costly method which doesnt do the full 
+    # calculation but does an "approximation" or guess using different methods
+    # Instead of finding the absolute difference we use a different method 
+    # h = sqrt( (current_cell.x – goal.x)2 + 
+            # (current_cell.y – goal.y)2 )
+    h = ((x1 - x2) ** 2 + (y1 - y2) ** 2) ** 0.5 # eculedian
+    # return abs(x1 - x2) + abs(y1 - y2)  #manhattan calc
+    return h
+  
+  def connectDots(self, start, end):
+    # Create a dictionary to store the 2D matrix data
+    masterMatrix = {(x, y): color for x, y, color in self.masterList}
+
+    # Define the traversable and wall colors
+    # traversableColor = [(255, 255, 255)]  # White color
+    traversableColor = QPoint.white  # White color
+
+    # wall_colors = [(0, 0, 0)]  # Black color antyhing not black
+
+    # Initialize the A* search
+    queue = [(0, start[0], start[1])] # (fScore, x, y) Lowest fScore will be at front
+    cameFrom = {}
+    gScore = {(start[0], start[1]): 0} #Dictonary to keep track of points we visted and their gScores
+    fScore = {(start[0], start[1]): self.heuristic(*start, *end)} #Same as gScore expect for fScore
+
+    while queue:
+      # get the first item in queue
+      f, x, y = heapq.heappop(queue)
+
+      # if we hit our end point, we get all the points in the cam from 
+      # dict and add those to our path (this will be in reverse order)
+      if (x,y) == end:
+        self.path = [(x,y)]
+        while (x, y) in cameFrom:
+          x, y = cameFrom[(x, y)]
+          self.path.append((x, y))
+        self.path = self.path[::-1]
+        return
+      
+      # check each direction for the current point we are on to see if 
+      # which point we should move to next
+      for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]:
+        # get the points surronding our current point 
+        checkX, checkY = x+dx, y+dy
+        # if (checkX, checkY) in masterMatrix and masterMatrix[(checkX,checkY)] in 
+      # if len(self.copyofLCP) > 1:
+    #   refPoint = self.copyofLCP.pop(0)
+    #   copyList = np.array(self.copyofLCP )
+    #   distances = cdist([refPoint], copyList)[0]
+    #   # Find the index of the closest point
+    #   closest_index = np.argmin(distances)
+    #   # print(closest_index)
+    #   closest_point = copyList[closest_index]
+    #   self.listNxtPoints.append(closest_point)
+    #   # print(closest_point)
+    #   self.createLists()
+    # else:
+    #   return  
 
   def colourPoints(self):
     # creating painter object
@@ -237,28 +288,34 @@ class Window(QMainWindow):
 
   def connectPoints(self):
     self.listColoursPoints = []
+    self.masterList = []
+    # Loop Through each pixel in image and get the colour and point
     for y in range(self.image.height()):
       for x in range(self.image.width()):
         colour = QColor(self.image.pixel(x,y))
-        if colour !=Qt.white:
-          # self.listColoursPoints.append(QPoint(x,y))
+        self.masterList.append((x,y,colour))
+        if colour == Qt.black:
           self.listColoursPoints.append((x,y))
-    
-    self.listNxtPoints = []
-    self.copyofLCP = self.listColoursPoints.copy()
-    self.createLists()
-    self.listNxtPoints = [(tuple(point)) for point in self.listNxtPoints]
- 
-    self.timer = QTimer(self)
-    self.timer.timeout.connect(self.colourPoints)
-    self.timer.start(100)  # Start the timer, it will call draw_lines() every 100 ms
+    # Loop through points we want to connect 
+    # print(self.masterList[:-1])
+    print(len(self.listColoursPoints))
+    i = 0
+    while i < len(self.listColoursPoints):
+      if (i+1) == len(self.listColoursPoints):
+        break
+      print(self.listColoursPoints[i],self.listColoursPoints[i+1])
+      # self.connectDots(self.listColoursPoints[i],self.listColoursPoints[i+1])
+      i+=1
+
+
+    # THIS WILL BE TO DRAW THE POINTS
+    # self.timer = QTimer(self)
+    # self.timer.timeout.connect(self.colourPoints)
+    # self.timer.start(100)  # Start the timer, it will call draw_lines() every 100 ms
    
-    # TODO: Get list of points, and use algorithm to connect them together
-      # TODO: Change list so that it contains the point and the closet point next to it
-      # TODO: We get multiple points for each colour work on this 
-      # TODO: 
-    # TODO: depending on brush size change how the algorithm works 
-    # TODO:  
+  # TODO: send masterList to algorithm to get array of points to draw
+      #TODO: Perform algorithm
+  # TODO: Draw this new array to connect the points
 # create pyqt5 app
 App = QApplication(sys.argv)
  
