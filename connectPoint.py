@@ -8,12 +8,14 @@ import numpy as np
 from scipy.spatial import cKDTree
 from scipy.spatial.distance import cdist
 import heapq
+import threading
 
 
 # window class
 class Window(QMainWindow):
   def __init__(self):
     super().__init__()
+
     # setting title
     self.setWindowTitle("Paint with PyQt5")
 
@@ -205,7 +207,7 @@ class Window(QMainWindow):
         # Handle the case where the color name is not found
         self.brushColor = Qt.black
 
-  def heuristic(x1, y1, x2, y2):
+  def heuristic(self, x1, y1, x2, y2):
     """
     Heuristic function for A* search (Manhattan distance).
     """
@@ -223,9 +225,7 @@ class Window(QMainWindow):
     # Create a dictionary to store the 2D matrix data
     masterMatrix = {(x, y): color for x, y, color in self.masterList}
 
-    # Define the traversable and wall colors
-    # traversableColor = [(255, 255, 255)]  # White color
-    traversableColor = QPoint.white  # White color
+    traversableColor = [Qt.white, Qt.black] # White color
 
     # wall_colors = [(0, 0, 0)]  # Black color antyhing not black
 
@@ -234,7 +234,6 @@ class Window(QMainWindow):
     cameFrom = {}
     gScore = {(start[0], start[1]): 0} #Dictonary to keep track of points we visted and their gScores
     fScore = {(start[0], start[1]): self.heuristic(*start, *end)} #Same as gScore expect for fScore
-
     while queue:
       # get the first item in queue
       f, x, y = heapq.heappop(queue)
@@ -242,53 +241,83 @@ class Window(QMainWindow):
       # if we hit our end point, we get all the points in the cam from 
       # dict and add those to our path (this will be in reverse order)
       if (x,y) == end:
-        self.path = [(x,y)]
+        path = [(x,y)]
         while (x, y) in cameFrom:
           x, y = cameFrom[(x, y)]
-          self.path.append((x, y))
-        self.path = self.path[::-1]
+          path.append((x, y))
+        self.pathList.append(path[::-1])
         return
       
       # check each direction for the current point we are on to see if 
       # which point we should move to next
-      for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]:
+      for dx, dy in [(0,1), (1,0), (0,-1), (-1,0)]:
+      # for dx, dy in [(0, 1), (0, -1), (1, 0), (-1, 0), (1, 1), (1, -1), (-1, 1), (-1, -1)]:
         # get the points surronding our current point 
         checkX, checkY = x+dx, y+dy
-        # if (checkX, checkY) in masterMatrix and masterMatrix[(checkX,checkY)] in 
-      # if len(self.copyofLCP) > 1:
-    #   refPoint = self.copyofLCP.pop(0)
-    #   copyList = np.array(self.copyofLCP )
-    #   distances = cdist([refPoint], copyList)[0]
-    #   # Find the index of the closest point
-    #   closest_index = np.argmin(distances)
-    #   # print(closest_index)
-    #   closest_point = copyList[closest_index]
-    #   self.listNxtPoints.append(closest_point)
-    #   # print(closest_point)
-    #   self.createLists()
-    # else:
-    #   return  
+        # check if our new point is in the masterMatrix dictonary and 
+        # then if that point is a traversable colour using the same matrix
+        if (checkX, checkY) in masterMatrix and masterMatrix[(checkX,checkY)] in traversableColor:
+            # get the gScore of our orginal x, y point and +1 to it 
+            # as we have moved (left, right, up, down or diagonally)
+            tempGScore = gScore[(x, y)] + 1
+
+            # check if the value we moved to is NOT in our gScore dictonary 
+            # or if our current score is lower than the Score we have moved to 
+            # we check gscore as fscore includes the calculation of which point is closer throwing off the algorithm 
+            if (checkX, checkY) not in gScore or tempGScore < gScore[(checkX, checkY)]:
+                cameFrom[(checkX, checkY)] = (x, y) # update our path 
+                # update our score dicatonaries with the temp score we calculated 
+                # and the heurisitc calculation as well 
+                gScore[(checkX, checkY)] = tempGScore
+
+                 # *end -> unpacks the tuple and sends it to the function
+                fScore[(checkX, checkY)] = tempGScore + self.heuristic(checkX, checkY, *end)
+                
+                # push all the points we checked into our queue, with their fScore and point value
+                heapq.heappush(queue, (fScore[(checkX, checkY)], checkX, checkY))
+    
+    return 
+
+  # PyQt has the functionality to add a timer to your window which allows for some pretty cool things 
+  # we can update our window every 10 milliseconds to create an animation of drawing an image. 
+  # what this function does is it starts our timer and sets the time limit -> 10ms
+  # after 10ms it calls the function we specified in our timeout functionality
+  def animate(self):
+    self.timer.start(10)
 
   def colourPoints(self):
-    # creating painter object
-    if len(self.listNxtPoints) > 0:
-      painter = QPainter(self.image)
+    # check if either our list of paths or our current path is not empty 
+    # we continue to draw 
+    if len(self.pathList)>0 or len(self.currentPath)>0:
+      # change which path we are drawing
+      if self.changePath:
+        self.currentPath = self.pathList.pop(0)
         
-      # set the pen of the painter
-      painter.setPen(QPen(self.brushColor, self.brushSize, 
-                      Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-      point1 = QPoint(*self.listColoursPoints.pop(0))
-      point2 = QPoint(*self.listNxtPoints.pop(0))
-      painter.drawLine(point1, point2)
-      self.update()
-      QTimer.singleShot(100, self.colourPoints)
-    else: 
+      # if our current path is not empty we continue drawing
+      if len(self.currentPath)>0:
+        self.changePath = False
+        # create painter object
+        painter = QPainter(self.image)
+        painter.setPen(QPen(Qt.black, self.brushSize, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+
+        # get the current point we have to draw in our path and change it to a Qpoint
+        # we have to unpack the tuple that is returned so we use *
+        point = QPoint(*self.currentPath.pop(0))
+
+        # draw our point, update the window and increment to next point
+        painter.drawPoint(point)
+        self.update()
+      else: #when empth we change paths
+        self.changePath = True
+
+    # stop the timer when both our current path and list of paths are empty
+    else:
       self.timer.stop()
-      return
 
   def connectPoints(self):
     self.listColoursPoints = []
     self.masterList = []
+    self.pathList = []
     # Loop Through each pixel in image and get the colour and point
     for y in range(self.image.height()):
       for x in range(self.image.width()):
@@ -296,26 +325,34 @@ class Window(QMainWindow):
         self.masterList.append((x,y,colour))
         if colour == Qt.black:
           self.listColoursPoints.append((x,y))
+
     # Loop through points we want to connect 
-    # print(self.masterList[:-1])
-    print(len(self.listColoursPoints))
     i = 0
     while i < len(self.listColoursPoints):
       if (i+1) == len(self.listColoursPoints):
         break
-      print(self.listColoursPoints[i],self.listColoursPoints[i+1])
-      # self.connectDots(self.listColoursPoints[i],self.listColoursPoints[i+1])
+      # print(self.listColoursPoints[i],self.listColoursPoints[i+1])
+      self.connectDots(self.listColoursPoints[i],self.listColoursPoints[i+1])
       i+=1
+    
+    # create a timer object for our window
+    self.timer = QTimer(self)
+    # connect the timeout of this timer to call a function
+    self.timer.timeout.connect(self.colourPoints)
 
+    # set our checks and current path
+    self.changePath = True
+    self.currentPath = [1]
 
-    # THIS WILL BE TO DRAW THE POINTS
-    # self.timer = QTimer(self)
-    # self.timer.timeout.connect(self.colourPoints)
-    # self.timer.start(100)  # Start the timer, it will call draw_lines() every 100 ms
-   
-  # TODO: send masterList to algorithm to get array of points to draw
-      #TODO: Perform algorithm
-  # TODO: Draw this new array to connect the points
+    # start our timer 
+    self.animate()
+
+    
+# TODO: Write better comments
+# TODO: Create optimized path finding 
+# TODO: Figure out the ability to change traversable colours, walls, and add 
+        # text explaingin?
+        
 # create pyqt5 app
 App = QApplication(sys.argv)
  
