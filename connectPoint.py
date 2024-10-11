@@ -3,55 +3,85 @@ from PyQt5.QtWidgets import *
 from PyQt5.QtGui import *
 from PyQt5.QtCore import *
 import sys
-import time
-import numpy as np
-from scipy.spatial import cKDTree
-from scipy.spatial.distance import cdist
 import heapq
-import threading
+from PIL import Image
 
+# INTIAL CODE FRAMEWORK REFERENCED FROM:  
+# https://www.geeksforgeeks.org/pyqt5-create-paint-application/
+# Made changes to add A* algorithm to connect points together on the app
+#
 
-# window class
 class Window(QMainWindow):
+  #constructor
   def __init__(self):
     super().__init__()
 
     # setting title
-    self.setWindowTitle("Paint with PyQt5")
-
+    self.setWindowTitle("Paint App")
+   
     # setting geometry to main window
-    self.setGeometry(100, 100, 800, 600)
-    # self.setGeometry(100, 100, 100, 100)
+    self.maxSize = (800,600)
+    self.setGeometry(
+                      100, 
+                      100, 
+                      self.maxSize[0],
+                      self.maxSize[1]
+                    )
 
 
-    # creating image object
-    self.image = QImage(self.size(), QImage.Format_RGB32)
-    self.image.fill(Qt.white)
+    # Change our Cursor Image 
+    cursorImage = QPixmap('cursorPencil.png')
+    cursor = QCursor(cursorImage, 0, cursorImage.height())
+    self.setCursor(cursor)
 
     # drawing flag
     self.drawing = False
-    # default brush size abd colour
+
+    # default brush size and colour, lastpoint
     self.brushSize = 1
     self.brushColor = Qt.black
-
-    # QPoint object to tract the point
     self.lastPoint = QPoint()
 
     # creating menu bar
     mainMenu = self.menuBar()
+    self.menuHeight = mainMenu.height()
+
     # addiding menues to the main menu
     self.fileMenu = mainMenu.addMenu("File")
     self.brushMenu = mainMenu.addMenu("Brush Size")
     self.colourMenu = mainMenu.addMenu("Brush Color")
 
+    # functions to add buttons
     self.addSizeButtons()
     self.addColourButtons()
     self.addFileButtons()
 
+      # creating image object
+    # self.image = QImage(self.size(), QImage.Format_RGB32)
+    self.image = QImage(self.maxSize[0],self.maxSize[1]-self.menuHeight, QImage.Format_RGB32)
+    self.image.fill(Qt.white)
+
+#---------------------------END OF CONSTRUCTOR--------------------------
+  
+  def animate(self):
+    # PyQt has the functionality to add a timer to your window which allows for some pretty cool things 
+    # we can update our window every 10 milliseconds to create an animation of drawing an image. 
+    # what this function does is it starts our timer and sets the time limit -> 10ms
+    # after 10ms it calls the function we specified in our timeout functionality
+    self.timer.start(10)
+
   #-----------------------------------ADD BUTTONS-----------------------
-  # add buttons to size menue
   def addSizeButtons(self):
-    #-----------creating options for brush sizes-----------------------
+    """
+    Adds size buttons to the brush menu.
+
+    This function creates four action buttons (4px, 7px, 9px, and 12px) and adds them to the `self.brushMenu` menu. Each button is connected to a corresponding `setBrushSize()` method call, which sets the brush size to the specified value.
+
+    The purpose of this function is to provide the user with a visual selection of brush sizes that can be easily chosen from the brush menu.
+
+    Returns:
+        None
+    """
     # creating action for selecting pixel of 4px, adding this action to 
     # the brush menu, then we connect a button 
     px4 = QAction("4px", self) #button 
@@ -70,10 +100,18 @@ class Window(QMainWindow):
     px12 = QAction("12px", self)
     self.brushMenu.addAction(px12)
     px12.triggered.connect(lambda: self.setBrushSize(12))
-    #-----------creating options for brush sizes-----------------------
   
-  # add buttons to colour menu
   def addColourButtons(self):
+    """
+    Adds color buttons to the color menu.
+
+    This function creates five action buttons (Black, White, Green, Yellow, and Red) and adds them to the `self.colourMenu` menu. Each button is connected to a corresponding `changeColour()` method call, which sets the drawing color to the specified value.
+
+    The purpose of this function is to provide the user with a visual selection of colors that can be easily chosen from the color menu.
+
+    Returns:
+        None
+    """
     # black button added to menu and adding action to menu
     black = QAction("Black", self)
     self.colourMenu.addAction(black)
@@ -95,8 +133,19 @@ class Window(QMainWindow):
     self.colourMenu.addAction(red)
     red.triggered.connect(lambda: self.changeColour('red'))
  
-  # add buttons to file menu
   def addFileButtons(self):
+    """
+    Adds file-related buttons to the file menu.
+
+    This function creates three action buttons: "Save", "Clear", and "Connect Points". These buttons are added to the `self.fileMenu` menu.
+
+    The "Save" button is connected to the `self.save` method, which is responsible for saving the user's drawing. The "Clear" button is connected to the `self.clear` method, which clears the drawing canvas. The "Connect Points" button is connected to the `self.connectPoints` method, which draws lines between the points the user has drawn.
+
+    The purpose of this function is to provide the user with a set of common file-related actions that can be easily accessed from the file menu.
+
+    Returns:
+        None
+    """
     # creating save action
     saveAction = QAction("Save", self)
     saveAction.setShortcut("Ctrl + S") # adding short cut for save action
@@ -108,16 +157,97 @@ class Window(QMainWindow):
     self.fileMenu.addAction(clearAction)
     clearAction.triggered.connect(self.clear)
 
+    openAction = QAction("Open", self)
+    self.fileMenu.addAction(openAction)
+    openAction.triggered.connect(self.open)
     #draw points button 
     connectPointButton = QAction('Connect Points', self)
     self.fileMenu.addAction(connectPointButton)
     connectPointButton.triggered.connect(self.connectPoints)
   #-----------------------------------ADD BUTTONS-----------------------
+  
+
+  #-----------------------------------BUTTON ACTIONS--------------------
+  def save(self):
+    """
+    Saves the current state of the canvas to a file.
+
+    The supported file formats for saving are PNG (*.png), JPEG (*.jpg, *.jpeg), and all files (*.*).
+
+    This method is typically called when the user wants to save the current state of the canvas to a file, such as by clicking a "Save" button or menu item in the application.
+    """
+    filePath, _ = QFileDialog.getSaveFileName(self, "Save Image", "",
+                      "PNG(*.png);;JPEG(*.jpg *.jpeg);;All Files(*.*) ")
+
+    if filePath == "":
+        return
+    self.image.save(filePath)
+
+  def open(self):
+    #opens file exporler
+    name, _ = QFileDialog.getOpenFileName(self, 'Open File', "",
+                                       "PNG(*.png);;JPEG(*.jpg *.jpeg)" ) 
+    if name:
+      self.clear()
+      print('Opening Image')
+      # if image is valied we open usign PILLOW and get width and height
+      openImage = Image.open(name)
+      w, h = openImage.size
+      # check if the opened image has a bigger size than our screen, 
+      # we resize accordinly 
+      if (w*h)>(self.maxSize[0]*self.maxSize[1]):
+        # resize image but maintaing aspect ratio
+        openImage.thumbnail(self.maxSize)
+      # create masterList and paint our image
+      self.masterList = self.createDictonaryOrList(openImage, openImageFlag=True)
+      self.automatePaint(openImageFlag=True)
+
+  def clear(self):
+    """
+    Method to clear the canvas
+    """
+    # make the whole canvas white
+    self.image.fill(Qt.white)
+    # update
+    self.update()
+
+  def setBrushSize(self, size):
+    """
+    Method to change brush size
+    Size (int) -> Size of new brush (in Pixels)
+    """
+    self.brushSize = size
+
+  def changeColour(self, colour):
+    """
+    Method to change the colour of the brush 
+
+    Colour (String (all lowercase)) -> Name of the
+                                       colour we want to change to
+    """
+    try:
+        color_attr = getattr(Qt, colour)
+        self.brushColor = color_attr
+    except AttributeError:
+        # Handle the case where the color name is not found
+        self.brushColor = Qt.black
+  #-----------------------------------BUTTON ACTIONS--------------------
 
 
   #----------------------------------MOUSE EVENTS-----------------------
-  # method for checking mouse cicks
   def mousePressEvent(self, event):
+    """
+    Handles the mouse press event for drawing on the canvas.
+    The `self.mouseDraw()` function is responsible for actually drawing 
+    on the canvas based on the mouse events.
+
+    Args: 
+      event (QMouseEvent):  The mouse event object that contains 
+                            information about the mouse press, 
+                            such as the cursor position 
+                            and button that was pressed.
+
+    """
     # if left mouse button is pressed
     if event.button() == Qt.LeftButton:
       # make drawing flag true
@@ -129,8 +259,17 @@ class Window(QMainWindow):
         position=self.lastPoint
       )
       
-  # METHOD FOR WHEN MOUSE MOVES
   def mouseMoveEvent(self, event):
+    """
+    Handles the mouse move event for drawing on the canvas.
+    The `self.mouseDraw()` function is responsible for actually drawing 
+    on the canvas based on the mouse events.
+
+    Args:
+      event (QMouseEvent):  The mouse event object that contains 
+                            information about the current mouse 
+                            position and button states.
+    """
     # checking if left button is pressed and drawing flag is true
     if (event.buttons() & Qt.LeftButton) & self.drawing:
       self.mouseDraw(
@@ -139,74 +278,71 @@ class Window(QMainWindow):
         drag=True
       )
 
-  # method for mouse left button release
   def mouseReleaseEvent(self, event):
-
+    """
+    Handles the mouse release event for drawing on the canvas.
+    This function is called when the user releases the left mouse button. 
+    Args:
+      event (QMouseEvent):  The mouse event object that contains 
+                            information about the mouse release, 
+    """
     if event.button() == Qt.LeftButton:
         # make drawing flag false
         self.drawing = False
 
-  # draw on application
   def mouseDraw(self, draw, position, drag=False):
+    """
+    Draws on the canvas based on mouse events.
+
+    Args:
+      draw (QMouseEvent): The mouse event object that contains 
+                          information about the current mouse position.
+      position (QPoint): The last recorded mouse position.
+      drag (bool, optional):  Indicates whether the user is dragging 
+                              the mouse while drawing. Defaults to `False`.
+    """
     # creating painter object
-      painter = QPainter(self.image)
-        
-      # set the pen of the painter
-      painter.setPen(QPen(self.brushColor, self.brushSize, 
-                      Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    painter = QPainter(self.image)
+    
+    self.lastPoint = QPoint(self.lastPoint.x(), self.lastPoint.y()-self.menuHeight)
+    drawPoint = QPoint(draw.pos().x(), draw.pos().y()-self.menuHeight)
 
-      # if drag is True, the mouse is clicked and moving so we draw from 
-      # point to point 
-      if drag:
-        painter.drawLine(self.lastPoint, draw.pos())
-      # else we are just clicking so draw at that point
-      else:
-        painter.drawPoint(self.lastPoint)
-        # creating painter object
+    # set the pen of the painter
+    painter.setPen(QPen(self.brushColor, self.brushSize, 
+                    Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
 
-      # change the last point and update the the image
-      self.lastPoint = draw.pos()  
-      self.update()
+    # if drag is True, the mouse is clicked and moving so we draw from 
+    # point to point 
+    if drag:
+      painter.drawLine(self.lastPoint, drawPoint)
+    # else we are just clicking so draw at that point
+    else:
+      painter.drawPoint(self.lastPoint)
+      # creating painter object
+
+    # change the last point and update the the image
+    self.lastPoint = draw.pos()  
+    self.update()
   
-  # paint event
   def paintEvent(self, event):
+    """
+    Handles the paint event for the canvas.
+
+    Args:
+        event (QPaintEvent): The paint event object that contains 
+        information about the area of the canvas that needs to be redrawn.
+    """
     # create a canvas
     canvasPainter = QPainter(self)
-      
     # draw rectangle  on the canvas
-    canvasPainter.drawImage(self.rect(), self.image, self.image.rect())
+    canvasPainter.drawImage(0, self.menuHeight, self.image)
+    # canvasPainter.drawImage(self.rect(), self.image, self.image.rect())
+
+
   #----------------------------------MOUSE EVENTS-----------------------
 
 
-  # method for saving canvas
-  def save(self):
-    filePath, _ = QFileDialog.getSaveFileName(self, "Save Image", "",
-                      "PNG(*.png);;JPEG(*.jpg *.jpeg);;All Files(*.*) ")
-
-    if filePath == "":
-        return
-    self.image.save(filePath)
-
-  # method for clearing every thing on canvas
-  def clear(self):
-    # make the whole canvas white
-    self.image.fill(Qt.white)
-    # update
-    self.update()
-
-  # method for changing brush size (size in pixels)
-  def setBrushSize(self, size):
-    self.brushSize = size
-
-  # method to change brush colour (uses strings in lowercase)
-  def changeColour(self, colour):
-    try:
-        color_attr = getattr(Qt, colour)
-        self.brushColor = color_attr
-    except AttributeError:
-        # Handle the case where the color name is not found
-        self.brushColor = Qt.black
-
+  #----------------------------DIFFERENT COLOURING FUNCATIONALITY-------
   def heuristic(self, x1, y1, x2, y2):
     """
     Heuristic function for A* search (Manhattan distance).
@@ -221,11 +357,18 @@ class Window(QMainWindow):
     # return abs(x1 - x2) + abs(y1 - y2)  #manhattan calc
     return h
   
-  def connectDots(self, start, end):
+  def getPath(self, start, end):
+    """
+    Function that uses A* algorithm to find the best path between two 
+    given points (Start, end)
+
+    Start (tuple) -> A tuple that contains the starting coordinates
+    End (tuple) -> A tuple that contains the ending coordinates
+    """
     # Create a dictionary to store the 2D matrix data
     masterMatrix = {(x, y): color for x, y, color in self.masterList}
 
-    traversableColor = [Qt.white, Qt.black] # White color
+    traversableColor = [Qt.white, Qt.black] 
 
     # wall_colors = [(0, 0, 0)]  # Black color antyhing not black
 
@@ -259,7 +402,7 @@ class Window(QMainWindow):
         if (checkX, checkY) in masterMatrix and masterMatrix[(checkX,checkY)] in traversableColor:
             # get the gScore of our orginal x, y point and +1 to it 
             # as we have moved (left, right, up, down or diagonally)
-            tempGScore = gScore[(x, y)] + 1
+            tempGScore = gScore[(x, y)] + 1 # +1 as each point is one move
 
             # check if the value we moved to is NOT in our gScore dictonary 
             # or if our current score is lower than the Score we have moved to 
@@ -270,22 +413,29 @@ class Window(QMainWindow):
                 # and the heurisitc calculation as well 
                 gScore[(checkX, checkY)] = tempGScore
 
+                # wallScore = self.distance_to_wall(checkX, checkY, masterMatrix)
                  # *end -> unpacks the tuple and sends it to the function
-                fScore[(checkX, checkY)] = tempGScore + self.heuristic(checkX, checkY, *end)
-                
+                fScore[(checkX, checkY)] = tempGScore + self.heuristic(checkX, checkY, *end) 
                 # push all the points we checked into our queue, with their fScore and point value
                 heapq.heappush(queue, (fScore[(checkX, checkY)], checkX, checkY))
     
     return 
 
-  # PyQt has the functionality to add a timer to your window which allows for some pretty cool things 
-  # we can update our window every 10 milliseconds to create an animation of drawing an image. 
-  # what this function does is it starts our timer and sets the time limit -> 10ms
-  # after 10ms it calls the function we specified in our timeout functionality
-  def animate(self):
-    self.timer.start(10)
+  def colourPath(self):
+    """
+    Handles the drawing of paths on the canvas.
 
-  def colourPoints(self):
+    This function is responsible for the following:
+
+    1. Checking if there are any paths available to be drawn, either in the `self.pathList` or `self.currentPath`.
+    2. If there are paths available, it determines which path to draw next based on the `self.changePath` flag.
+    3. If there is a current path to draw, it creates a QPainter object, sets the pen color and size, and draws the next point in the path on the `self.image` canvas.
+    4. After drawing a point, it updates the canvas to display the changes.
+    5. If the `self.currentPath` is empty, it sets the `self.changePath` flag to True to switch to the next path in `self.pathList`.
+    6. If both `self.pathList` and `self.currentPath` are empty, it stops the timer that triggers this function.
+
+    This function is typically called repeatedly by a timer or other mechanism to continuously draw the paths on the canvas.
+    """
     # check if either our list of paths or our current path is not empty 
     # we continue to draw 
     if len(self.pathList)>0 or len(self.currentPath)>0:
@@ -315,16 +465,27 @@ class Window(QMainWindow):
       self.timer.stop()
 
   def connectPoints(self):
+    """
+    Connects the black points in the image using the A* algorithm.
+
+    This function performs the following steps:
+
+    1. Initializes the `self.listColoursPoints` list to store the coordinates of the black points in the image.
+    2. Initializes the `self.masterList` list to store the color information for each pixel in the image.
+    3. Initializes the `self.pathList` list to store the paths between the black points.
+    
+
+    This function is responsible for the initial setup and preprocessing of the image data, as well as the setup of the timer and path drawing logic.
+    """
+
+    #set lists
     self.listColoursPoints = []
     self.masterList = []
     self.pathList = []
+
+    
     # Loop Through each pixel in image and get the colour and point
-    for y in range(self.image.height()):
-      for x in range(self.image.width()):
-        colour = QColor(self.image.pixel(x,y))
-        self.masterList.append((x,y,colour))
-        if colour == Qt.black:
-          self.listColoursPoints.append((x,y))
+    self.masterList = self.createDictonaryOrList(self.image)
 
     # Loop through points we want to connect 
     i = 0
@@ -332,13 +493,58 @@ class Window(QMainWindow):
       if (i+1) == len(self.listColoursPoints):
         break
       # print(self.listColoursPoints[i],self.listColoursPoints[i+1])
-      self.connectDots(self.listColoursPoints[i],self.listColoursPoints[i+1])
+      self.getPath(self.listColoursPoints[i],self.listColoursPoints[i+1])
       i+=1
-    
+    size = len(self.listColoursPoints)
+
+
+    if size <=0:
+      print('No Points Found')
+    elif size==1:
+      print('One point found')
+    else: 
+      # paint our paths
+      print('Connecting Points')
+      self.automatePaint()
+
+  def colourImage(self):
+    # LOOP REFERENCED FROM PREVIOUS CODE I CREATED 'animateImage.py'
+    if len(self.masterList)>0:
+      painter = QPainter(self.image)
+      # this draws the whole thing, we want to be able to keep track of where we are as well as make sure we dont copy the last 
+      # we can use a counter/timer or something to create this, either when a colour ends or keep track of a count then cancel
+
+      colourKeys = list(self.masterList.keys())
+      for colour in colourKeys:
+        cordList = self.masterList[colour]
+        for i in range(10):
+          if not cordList:
+            del self.masterList[colour]
+            break
+          cord = cordList.pop(0)
+          #get color based on rgb key in masterDict
+          paintColour = QColor(*colour)
+          painter.setPen(paintColour)
+          painter.drawPoint(*cord)
+          i+=1
+
+      # End the painting and update the label
+      painter.end()
+      self.update()
+    else:
+      self.timer.stop()
+
+
+  def automatePaint(self, openImageFlag=False):
     # create a timer object for our window
     self.timer = QTimer(self)
-    # connect the timeout of this timer to call a function
-    self.timer.timeout.connect(self.colourPoints)
+    
+    if openImageFlag:
+      print(openImageFlag)
+      self.timer.timeout.connect(self.colourImage)
+    else:  
+      # connect the timeout of this timer to call a function
+      self.timer.timeout.connect(self.colourPath)
 
     # set our checks and current path
     self.changePath = True
@@ -347,20 +553,64 @@ class Window(QMainWindow):
     # start our timer 
     self.animate()
 
-    
-# TODO: Write better comments
-# TODO: Create optimized path finding 
+  def createDictonaryOrList(self, image, openImageFlag=False):
+    if openImageFlag: # if we are openign an image change what we are creating
+      width, height = image.size
+      masterList = {}
+    else: # we use () an lists if we are connecting points
+      height = image.height()
+      width = image.width()
+      masterList = []
+
+    # Loop through the given image and get each coordinate and Colour value
+    for y in range(height):
+      for x in range(width):
+
+        if openImageFlag: #we open picture and get each pixel, cord and colour
+          colourVal = image.getpixel((x,y))
+          # masterList.append((x,y,colourVal))
+          if colourVal not in masterList:
+            masterList[colourVal]=[(x,y)]
+          else:
+            masterList[colourVal].append((x,y))
+
+        else:  #open our canvas and we get each pixel, cord and colour
+          colour = QColor(self.image.pixel(x,y))
+          masterList.append((x,y,colour))
+          if colour == Qt.black:
+            self.listColoursPoints.append((x,y))
+
+    return masterList
+  
+    #----------------------------------CONNECT POINT FUNCATIONALITY-------
+
+
+
+# TODO: Add error handling
+  # TODO: Too many points? 
+
+
 # TODO: Figure out the ability to change traversable colours, walls, and add 
-        # text explaingin?
-        
+        # text explaining?
+# TODO: Change way to connect points -> less pixel dense, or buffer of 10 px in normal
+  # TODO: Fix menu to change how connect points works if we do this ^
+# TODO: Fix visual stuff 
+  # TODO: make bigger?
+  # TODO: Change Colour, 
+# TODO: Create optimized path finding (this means we would change our algo)
+# TODO: Docstring for remainging funcitons
+
+
 # create pyqt5 app
-App = QApplication(sys.argv)
- 
-# create the instance of our Window
-window = Window()
- 
-# showing the window
-window.show()
- 
-# start the app
-sys.exit(App.exec())
+
+if __name__ == "__main__":
+  App = QApplication(sys.argv)
+  
+  # create the instance of our Window
+  window = Window()
+  
+  # showing the window
+  window.show()
+  
+  # start the app
+  sys.exit(App.exec())
