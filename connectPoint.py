@@ -20,7 +20,7 @@ class Window(QMainWindow):
     self.setWindowTitle("Paint App")
    
     # setting geometry to main window
-    self.maxSize = (800,600)
+    self.maxSize = (1000,800)
     self.setGeometry(
                       100, 
                       100, 
@@ -34,6 +34,10 @@ class Window(QMainWindow):
     cursor = QCursor(cursorImage, 0, cursorImage.height())
     self.setCursor(cursor)
 
+    redButton = QPushButton('Red')
+    # layout = QBoxLayout()
+    # layout.addWidget(redButton)
+
     # drawing flag
     self.drawing = False
 
@@ -45,7 +49,6 @@ class Window(QMainWindow):
     # creating menu bar
     mainMenu = self.menuBar()
     self.menuHeight = mainMenu.height()
-
     # addiding menues to the main menu
     self.fileMenu = mainMenu.addMenu("File")
     self.brushMenu = mainMenu.addMenu("Brush Size")
@@ -58,7 +61,7 @@ class Window(QMainWindow):
 
       # creating image object
     # self.image = QImage(self.size(), QImage.Format_RGB32)
-    self.image = QImage(self.maxSize[0],self.maxSize[1]-self.menuHeight, QImage.Format_RGB32)
+    self.image = QImage(self.maxSize[0]-100, self.maxSize[1]-self.menuHeight, QImage.Format_RGB32)
     self.image.fill(Qt.white)
 
 #---------------------------END OF CONSTRUCTOR--------------------------
@@ -195,7 +198,7 @@ class Window(QMainWindow):
       w, h = openImage.size
       # check if the opened image has a bigger size than our screen, 
       # we resize accordinly 
-      if (w*h)>(self.maxSize[0]*self.maxSize[1]):
+      if (w*h)>((self.maxSize[0]-100)*(self.maxSize[1]-self.menuHeight)):
         # resize image but maintaing aspect ratio
         openImage.thumbnail(self.maxSize)
       # create masterList and paint our image
@@ -335,7 +338,7 @@ class Window(QMainWindow):
     # create a canvas
     canvasPainter = QPainter(self)
     # draw rectangle  on the canvas
-    canvasPainter.drawImage(0, self.menuHeight, self.image)
+    canvasPainter.drawImage(0, self.menuHeight, self.image) # x,y image 
     # canvasPainter.drawImage(self.rect(), self.image, self.image.rect())
 
 
@@ -508,6 +511,7 @@ class Window(QMainWindow):
       self.automatePaint()
 
   def colourImage(self):
+    print('How many times we get called')
     # LOOP REFERENCED FROM PREVIOUS CODE I CREATED 'animateImage.py'
     if len(self.masterList)>0:
       painter = QPainter(self.image)
@@ -532,6 +536,7 @@ class Window(QMainWindow):
       painter.end()
       self.update()
     else:
+      print('----------')
       self.timer.stop()
 
 
@@ -585,23 +590,21 @@ class Window(QMainWindow):
     #----------------------------------CONNECT POINT FUNCATIONALITY-------
 
 
-
-# TODO: Add error handling
-  # TODO: Too many points? 
-
-
+# TODO: UI OVERHAULED
+  # TODO: Add our functions for connecting points 
+  # TODO: Add brushchange and menue functionality
 # TODO: Figure out the ability to change traversable colours, walls, and add 
         # text explaining?
 # TODO: Change way to connect points -> less pixel dense, or buffer of 10 px in normal
   # TODO: Fix menu to change how connect points works if we do this ^
 # TODO: Fix visual stuff 
-  # TODO: make bigger?
-  # TODO: Change Colour, 
+  # TODO: Canvas is in middle of screen with borders around (just like paint)
+  # TODO: Change Colour -> Colour wheel?, colour squares 
+  # TODO: Ability to resize
 # TODO: Create optimized path finding (this means we would change our algo)
 # TODO: Docstring for remainging funcitons
 
 
-# create pyqt5 app
 
 if __name__ == "__main__":
   App = QApplication(sys.argv)
