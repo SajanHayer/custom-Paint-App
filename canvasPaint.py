@@ -22,8 +22,9 @@ class paintWindow(QLabel):
     self.setPixmap(self.pixMap)
 
     self.brushColour = QColor('#000000') #BLACK
-
     self.brushSize = 4
+
+    # used for drwaing
     self.lastPoint = QPoint()
 
     # Change our Cursor Image 
@@ -31,9 +32,9 @@ class paintWindow(QLabel):
     cursor = QCursor(cursorImage, 0, cursorImage.height())
     self.setCursor(cursor)
 
-    #connect Point settings
-    self.black = Qt.black
-    self.white = Qt.white
+    # change these if you want to change the colour of points to connect 
+    self.black = Qt.black # points to connect colour 
+    self.white = Qt.white # travesal colour 
 
   #--------------------------Brush Actions------------------------------
   def changeBrushColour(self, colour):
@@ -125,16 +126,6 @@ class paintWindow(QLabel):
     self.update()
     self.pixMap = QPixmap(self.pixmap())
     self.lastPoint = draw.pos()
-
-  def paintpoint(self, x, y):
-    point1 = QPoint(x, y)
-    # Set our painter and change our pen
-    painter = QPainter(self.pixmap())
-    
-    painter.drawPoint(point1)
-    painter.end()
-    self.update()
-    self.pixMap = QPixmap(self.pixmap())
 
   def animate(self):
     self.timer.start(10)
